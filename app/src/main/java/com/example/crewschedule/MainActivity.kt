@@ -262,7 +262,7 @@ private fun CrewScheduleApp(context: Context) {
                 }
                 days.forEach { d ->
                     StatusCell(
-                        status=state.statuses[p.id]?.get(dayKey(d)) ?: STATUS_NO,
+                        status=state.statuses[p.id]?.get(dayKey(d)) ?: STATUS_UNKNOWN,
                         modifier=Modifier.weight(1f),
                         onStatusChange={status -> onDay(p.id,d,status)}
                     )
