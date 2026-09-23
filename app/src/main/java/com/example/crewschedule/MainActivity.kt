@@ -294,9 +294,18 @@ private fun CrewScheduleApp(context: Context) {
             Text(symbol,fontSize=21.sp,fontWeight=FontWeight.Bold,color=color)
         }
         DropdownMenu(expanded=expanded,onDismissRequest={expanded=false}) {
-            DropdownMenuItem(text={Text("✓  Scheduled")},onClick={onStatusChange(STATUS_YES);expanded=false})
-            DropdownMenuItem(text={Text("X  Not scheduled")},onClick={onStatusChange(STATUS_NO);expanded=false})
-            DropdownMenuItem(text={Text("?  Unknown")},onClick={onStatusChange(STATUS_UNKNOWN);expanded=false})
+            DropdownMenuItem(
+                text={Row(verticalAlignment=Alignment.CenterVertically){Text("✓",color=Color(0xFF36D18A),fontSize=22.sp,fontWeight=FontWeight.Bold); Spacer(Modifier.width(10.dp)); Text("Scheduled",color=Color(0xFF36D18A),fontWeight=FontWeight.SemiBold)}},
+                onClick={onStatusChange(STATUS_YES);expanded=false}
+            )
+            DropdownMenuItem(
+                text={Row(verticalAlignment=Alignment.CenterVertically){Text("X",color=Color(0xFFE85D5D),fontSize=21.sp,fontWeight=FontWeight.Bold); Spacer(Modifier.width(10.dp)); Text("Not scheduled",color=Color(0xFFE85D5D),fontWeight=FontWeight.SemiBold)}},
+                onClick={onStatusChange(STATUS_NO);expanded=false}
+            )
+            DropdownMenuItem(
+                text={Row(verticalAlignment=Alignment.CenterVertically){Text("?",color=Color(0xFFF2C94C),fontSize=22.sp,fontWeight=FontWeight.Bold); Spacer(Modifier.width(10.dp)); Text("Unknown",color=Color(0xFFF2C94C),fontWeight=FontWeight.SemiBold)}},
+                onClick={onStatusChange(STATUS_UNKNOWN);expanded=false}
+            )
         }
     }
 }
