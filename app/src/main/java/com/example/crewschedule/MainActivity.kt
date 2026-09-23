@@ -9,7 +9,6 @@ import androidx.activity.compose.setContent
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -22,6 +21,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
@@ -200,14 +200,16 @@ private fun CrewScheduleApp(context: Context) {
 
     MaterialTheme(colorScheme=darkScheme) {
         Surface(Modifier.fillMaxSize(), color=Color(0xFF0B1018)) {
-            Column(Modifier.fillMaxSize()) {
+            Column(Modifier.fillMaxSize().statusBarsPadding()) {
                 TopBar(mode, {mode=it}, syncText)
                 WeekNavigator(monday, { monday=monday.minusWeeks(1) }, { monday=currentMonday() }, { monday=monday.plusWeeks(1) })
                 when(mode) {
-                    Mode.WEEK -> WeekMode(state,monday,{id,date ->
-                        val p=state.projects.firstOrNull{it.id==id} ?: return@WeekMode
-                        val old=state.statuses[id]?.get(dayKey(date)); val next=when(old){STATUS_YES->STATUS_NO;STATUS_NO->STATUS_UNKNOWN;else->STATUS_YES}
-                        val statuses=state.statuses.toMutableMap(); val days=(statuses[id]?.toMutableMap()?:mutableMapOf()); days[dayKey(date)]=next; statuses[id]=days; save(state.copy(statuses=statuses))
+                    Mode.WEEK -> WeekMode(state,monday,{id,date,status ->
+                        val statuses=state.statuses.toMutableMap()
+                        val days=(statuses[id]?.toMutableMap()?:mutableMapOf())
+                        days[dayKey(date)]=status
+                        statuses[id]=days
+                        save(state.copy(statuses=statuses))
                     },{dialog=it}) { adding=true }
                     Mode.CALENDAR -> CalendarMode(state,monday,{dialog=it})
                 }
@@ -237,18 +239,34 @@ private fun CrewScheduleApp(context: Context) {
     }
 }
 
-@Composable private fun WeekMode(state:ScheduleState,monday:LocalDate,onDay:(String,LocalDate)->Unit,onProject:(Project)->Unit,onAdd:()->Unit) {
-    val days=(0..4).map{monday.plusDays(it.toLong())}; val scroll=rememberScrollState()
-    Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(horizontal=12.dp)) {
-        Row(Modifier.fillMaxWidth().horizontalScroll(scroll)) {
-            Box(Modifier.width(145.dp).height(50.dp),contentAlignment=Alignment.CenterStart){IconButton(onClick=onAdd){Icon(Icons.Default.Add,"Add project")}}
-            days.forEach { d -> Box(Modifier.width(76.dp).height(50.dp),contentAlignment=Alignment.Center){Column(horizontalAlignment=Alignment.CenterHorizontally){Text(d.dayOfWeek.getDisplayName(TextStyle.SHORT,Locale.US).uppercase(),fontWeight=FontWeight.Bold,fontSize=12.sp);Text(d.dayOfMonth.toString(),fontSize=11.sp,color=Color(0xFF8997AA))}} }
+@Composable private fun WeekMode(state:ScheduleState,monday:LocalDate,onDay:(String,LocalDate,String)->Unit,onProject:(Project)->Unit,onAdd:()->Unit) {
+    val days=(0..4).map{monday.plusDays(it.toLong())}
+    Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(horizontal=8.dp)) {
+        Row(Modifier.fillMaxWidth().height(52.dp),verticalAlignment=Alignment.CenterVertically) {
+            Box(Modifier.width(104.dp).fillMaxHeight(),contentAlignment=Alignment.CenterStart){
+                IconButton(onClick=onAdd){Icon(Icons.Default.Add,"Add project")}
+            }
+            days.forEach { d ->
+                Column(Modifier.weight(1f).fillMaxHeight(),horizontalAlignment=Alignment.CenterHorizontally,verticalArrangement=Arrangement.Center) {
+                    Text(d.dayOfWeek.getDisplayName(TextStyle.SHORT,Locale.US).uppercase(),fontWeight=FontWeight.Bold,fontSize=11.sp)
+                    Text(d.dayOfMonth.toString(),fontSize=11.sp,color=Color(0xFF8997AA))
+                }
+            }
         }
         Divider(color=Color(0xFF263244))
         state.projects.forEach { p ->
-            Row(Modifier.fillMaxWidth().horizontalScroll(scroll).height(68.dp),verticalAlignment=Alignment.CenterVertically) {
-                Column(Modifier.width(145.dp).clickable{onProject(p)}.padding(end=8.dp)){Text(p.name,maxLines=1,overflow=TextOverflow.Ellipsis,fontWeight=FontWeight.SemiBold);if(p.description.isNotBlank())Text(p.description,maxLines=1,overflow=TextOverflow.Ellipsis,fontSize=11.sp,color=Color(0xFF8794A8))}
-                days.forEach { d -> StatusCell(state.statuses[p.id]?.get(dayKey(d))?:STATUS_UNKNOWN){onDay(p.id,d)} }
+            Row(Modifier.fillMaxWidth().height(68.dp),verticalAlignment=Alignment.CenterVertically) {
+                Column(Modifier.width(104.dp).clickable{onProject(p)}.padding(end=6.dp)){
+                    Text(p.name,maxLines=1,overflow=TextOverflow.Ellipsis,fontWeight=FontWeight.SemiBold,fontSize=14.sp)
+                    if(p.description.isNotBlank()) Text(p.description,maxLines=1,overflow=TextOverflow.Ellipsis,fontSize=10.sp,color=Color(0xFF8794A8))
+                }
+                days.forEach { d ->
+                    StatusCell(
+                        status=state.statuses[p.id]?.get(dayKey(d)) ?: STATUS_NO,
+                        modifier=Modifier.weight(1f),
+                        onStatusChange={status -> onDay(p.id,d,status)}
+                    )
+                }
             }
             Divider(color=Color(0xFF1D2735))
         }
@@ -256,21 +274,57 @@ private fun CrewScheduleApp(context: Context) {
     }
 }
 
-@Composable private fun StatusCell(status:String,onClick:()->Unit) {
+@Composable private fun StatusCell(status:String,modifier:Modifier,onStatusChange:(String)->Unit) {
     val color=when(status){STATUS_YES->Color(0xFF36D18A);STATUS_NO->Color(0xFFE56B6F);else->Color(0xFFE4B55A)}
-    Box(Modifier.width(76.dp).height(56.dp).padding(6.dp).border(1.dp,Color(0xFF2A3545),RoundedCornerShape(10.dp)).background(color.copy(alpha=.12f),RoundedCornerShape(10.dp)).clickable{onClick()},contentAlignment=Alignment.Center){Text(if(status==STATUS_YES)"✓" else if(status==STATUS_NO)"X" else "?",fontSize=22.sp,fontWeight=FontWeight.Bold,color=color)}
+    var expanded by remember { mutableStateOf(false) }
+    val symbol=when(status){STATUS_YES->"✓";STATUS_NO->"X";else->"?"}
+    Box(modifier.height(56.dp).padding(4.dp),contentAlignment=Alignment.Center) {
+        Box(
+            Modifier.fillMaxSize()
+                .border(1.dp,Color(0xFF2A3545),RoundedCornerShape(10.dp))
+                .background(color.copy(alpha=.12f),RoundedCornerShape(10.dp))
+                .clickable{expanded=true},
+            contentAlignment=Alignment.Center
+        ) {
+            Text(symbol,fontSize=21.sp,fontWeight=FontWeight.Bold,color=color)
+        }
+        DropdownMenu(expanded=expanded,onDismissRequest={expanded=false}) {
+            DropdownMenuItem(text={Text("✓  Scheduled")},onClick={onStatusChange(STATUS_YES);expanded=false})
+            DropdownMenuItem(text={Text("X  Not scheduled")},onClick={onStatusChange(STATUS_NO);expanded=false})
+            DropdownMenuItem(text={Text("?  Unknown")},onClick={onStatusChange(STATUS_UNKNOWN);expanded=false})
+        }
+    }
 }
 
 @Composable private fun CalendarMode(state:ScheduleState,monday:LocalDate,onProject:(Project)->Unit) {
-    val days=(0..4).map{monday.plusDays(it.toLong())}; val vertical=rememberScrollState()
-    Row(Modifier.fillMaxSize().verticalScroll(vertical).padding(horizontal=8.dp),horizontalArrangement=Arrangement.spacedBy(6.dp)) {
-        days.forEach { d ->
-            val scheduled=state.projects.filter{state.statuses[it.id]?.get(dayKey(d))==STATUS_YES}
-            Column(Modifier.weight(1f).fillMaxHeight()) {
-                Text(d.dayOfWeek.getDisplayName(TextStyle.SHORT,Locale.US).uppercase(),Modifier.fillMaxWidth().padding(vertical=8.dp),fontWeight=FontWeight.Bold,fontSize=12.sp,textAlign=androidx.compose.ui.text.style.TextAlign.Center)
-                Text(d.dayOfMonth.toString(),Modifier.fillMaxWidth().padding(bottom=8.dp),fontSize=20.sp,fontWeight=FontWeight.Bold,textAlign=androidx.compose.ui.text.style.TextAlign.Center,color=Color(0xFF8CA7C7))
-                scheduled.forEach { p ->
-                    Surface(shape=RoundedCornerShape(8.dp),color=Color(0xFF173C2E),modifier=Modifier.fillMaxWidth().padding(bottom=6.dp).clickable{onProject(p)}) { Text(p.name,Modifier.padding(horizontal=7.dp,vertical=9.dp),fontSize=12.sp,fontWeight=FontWeight.SemiBold,maxLines=2,overflow=TextOverflow.Ellipsis,color=Color(0xFF70E5A8)) }
+    val days=(0..4).map{monday.plusDays(it.toLong())}
+    Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(horizontal=6.dp)) {
+        Row(Modifier.fillMaxWidth().border(1.dp,Color(0xFF334255))) {
+            days.forEach { d ->
+                val scheduled=state.projects.filter{state.statuses[it.id]?.get(dayKey(d))==STATUS_YES}
+                Column(Modifier.weight(1f).border(0.5.dp,Color(0xFF334255))) {
+                    Column(
+                        Modifier.fillMaxWidth().height(58.dp).background(Color(0xFF111A26)).border(0.5.dp,Color(0xFF334255)),
+                        horizontalAlignment=Alignment.CenterHorizontally,verticalArrangement=Arrangement.Center
+                    ) {
+                        Text(d.dayOfWeek.getDisplayName(TextStyle.SHORT,Locale.US).uppercase(),fontWeight=FontWeight.Bold,fontSize=11.sp)
+                        Text(d.dayOfMonth.toString(),fontSize=18.sp,fontWeight=FontWeight.Bold,color=Color(0xFF8CA7C7))
+                    }
+                    if(scheduled.isEmpty()) {
+                        Spacer(Modifier.height(48.dp))
+                    } else {
+                        scheduled.forEach { p ->
+                            Box(
+                                Modifier.fillMaxWidth().height(48.dp).padding(4.dp)
+                                    .border(1.dp,Color(0xFF2B7252),RoundedCornerShape(7.dp))
+                                    .background(Color(0xFF173C2E),RoundedCornerShape(7.dp))
+                                    .clickable{onProject(p)},contentAlignment=Alignment.Center
+                            ) {
+                                Text(p.name,Modifier.padding(horizontal=4.dp),fontSize=11.sp,fontWeight=FontWeight.SemiBold,
+                                    maxLines=2,overflow=TextOverflow.Ellipsis,textAlign=androidx.compose.ui.text.style.TextAlign.Center,color=Color(0xFF70E5A8))
+                            }
+                        }
+                    }
                 }
             }
         }
