@@ -1,4 +1,5 @@
 name: Build Crew Schedule APK
+# APK build trigger
 
 on:
   push:
