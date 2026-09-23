@@ -272,7 +272,7 @@ private fun CrewScheduleApp(context: Context) {
                 days.forEach { d ->
                     StatusCell(
                         status=state.statuses[p.id]?.get(dayKey(d)) ?: STATUS_UNKNOWN,
-                        modifier=Modifier.weight(1f).border(0.5.dp,Color(0xFF334255)),
+                        modifier=Modifier.weight(1f),
                         onStatusChange={status -> onDay(p.id,d,status)}
                     )
                 }
@@ -287,16 +287,13 @@ private fun CrewScheduleApp(context: Context) {
     val color=when(status){STATUS_YES->Color(0xFF36D18A);STATUS_NO->Color(0xFFE56B6F);else->Color(0xFFE4B55A)}
     var expanded by remember { mutableStateOf(false) }
     val symbol=when(status){STATUS_YES->"✓";STATUS_NO->"X";else->"?"}
-    Box(modifier.height(56.dp).padding(4.dp),contentAlignment=Alignment.Center) {
-        Box(
-            Modifier.fillMaxSize()
-                .border(1.dp,Color(0xFF2A3545),RoundedCornerShape(10.dp))
-                .background(color.copy(alpha=.12f),RoundedCornerShape(10.dp))
-                .clickable{expanded=true},
-            contentAlignment=Alignment.Center
-        ) {
-            Text(symbol,fontSize=21.sp,fontWeight=FontWeight.Bold,color=color)
-        }
+    Box(
+        modifier.fillMaxHeight()
+            .border(0.5.dp,Color(0xFF334255))
+            .clickable{expanded=true},
+        contentAlignment=Alignment.Center
+    ) {
+        Text(symbol,fontSize=21.sp,fontWeight=FontWeight.Bold,color=color)
         DropdownMenu(expanded=expanded,onDismissRequest={expanded=false}) {
             DropdownMenuItem(
                 text={Row(verticalAlignment=Alignment.CenterVertically){Text("✓",color=Color(0xFF36D18A),fontSize=22.sp,fontWeight=FontWeight.Bold); Spacer(Modifier.width(10.dp)); Text("Scheduled",color=Color(0xFF36D18A),fontWeight=FontWeight.SemiBold)}},
@@ -345,11 +342,20 @@ private fun CrewScheduleApp(context: Context) {
             }
         }
         weekStarts.forEach { monday ->
-            Row(Modifier.fillMaxWidth().height(104.dp)) {
+            val daySchedules=(0..4).map { offset ->
+                val d=monday.plusDays(offset.toLong())
+                state.projects.filter{state.statuses[it.id]?.get(dayKey(d))==STATUS_YES}
+            }
+            val maxProjects=daySchedules.maxOfOrNull{it.size} ?: 0
+            // Each Monday-Friday week row gets only as tall as its busiest day.
+            // Other weeks remain compact instead of expanding to match it.
+            val rowHeight=(104 + ((maxProjects-1).coerceAtLeast(0) * 45)).dp
+
+            Row(Modifier.fillMaxWidth().height(rowHeight)) {
                 (0..4).forEach { offset ->
                     val d=monday.plusDays(offset.toLong())
                     val inMonth=d.year==month.year && d.month==month.month
-                    val scheduled=state.projects.filter{state.statuses[it.id]?.get(dayKey(d))==STATUS_YES}
+                    val scheduled=daySchedules[offset]
                     Column(
                         Modifier.weight(1f).fillMaxHeight()
                             .border(0.5.dp,Color(0xFF334255))
