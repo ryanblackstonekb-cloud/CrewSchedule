@@ -252,7 +252,11 @@ private fun CrewScheduleApp(context: Context) {
                 IconButton(onClick=onAdd){Icon(Icons.Default.Add,"Add project")}
             }
             days.forEach { d ->
-                Column(Modifier.weight(1f).fillMaxHeight(),horizontalAlignment=Alignment.CenterHorizontally,verticalArrangement=Arrangement.Center) {
+                Column(
+                    Modifier.weight(1f).fillMaxHeight().border(0.5.dp,Color(0xFF334255)),
+                    horizontalAlignment=Alignment.CenterHorizontally,
+                    verticalArrangement=Arrangement.Center
+                ) {
                     Text(d.dayOfWeek.getDisplayName(TextStyle.SHORT,Locale.US).uppercase(),fontWeight=FontWeight.Bold,fontSize=11.sp)
                     Text(d.dayOfMonth.toString(),fontSize=11.sp,color=Color(0xFF8997AA))
                 }
@@ -268,7 +272,7 @@ private fun CrewScheduleApp(context: Context) {
                 days.forEach { d ->
                     StatusCell(
                         status=state.statuses[p.id]?.get(dayKey(d)) ?: STATUS_UNKNOWN,
-                        modifier=Modifier.weight(1f),
+                        modifier=Modifier.weight(1f).border(0.5.dp,Color(0xFF334255)),
                         onStatusChange={status -> onDay(p.id,d,status)}
                     )
                 }
@@ -319,25 +323,32 @@ private fun CrewScheduleApp(context: Context) {
 }
 
 @Composable private fun CalendarMode(state:ScheduleState,month:YearMonth,onProject:(Project)->Unit) {
+    // Five-column work calendar: Monday through Friday only. Weekend dates are
+    // intentionally omitted, while adjacent-month weekdays remain visible in gray.
     val firstDay=month.atDay(1)
     val lastDay=month.atEndOfMonth()
-    val gridStart=firstDay.with(TemporalAdjusters.previousOrSame(DayOfWeek.MONDAY))
-    val gridEnd=lastDay.with(TemporalAdjusters.nextOrSame(DayOfWeek.FRIDAY))
-    val totalDays=(java.time.temporal.ChronoUnit.DAYS.between(gridStart,gridEnd)+1).toInt()
-    val days=(0 until totalDays).map{gridStart.plusDays(it.toLong())}
+    val firstMonday=firstDay.with(TemporalAdjusters.previousOrSame(DayOfWeek.MONDAY))
+    val lastMonday=lastDay.with(TemporalAdjusters.previousOrSame(DayOfWeek.MONDAY))
+    val weekStarts=generateSequence(firstMonday){it.plusWeeks(1)}
+        .takeWhile{!it.isAfter(lastMonday)}
+        .toList()
 
     Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(horizontal=6.dp)) {
         Row(Modifier.fillMaxWidth().height(38.dp)) {
-            days.take(5).forEach { d ->
-                Box(Modifier.weight(1f).fillMaxHeight().border(0.5.dp,Color(0xFF334255)),contentAlignment=Alignment.Center) {
-                    Text(d.dayOfWeek.getDisplayName(TextStyle.SHORT,Locale.US).uppercase(),fontWeight=FontWeight.Bold,fontSize=11.sp)
+            listOf(DayOfWeek.MONDAY,DayOfWeek.TUESDAY,DayOfWeek.WEDNESDAY,DayOfWeek.THURSDAY,DayOfWeek.FRIDAY).forEach { dow ->
+                Box(
+                    Modifier.weight(1f).fillMaxHeight().border(0.5.dp,Color(0xFF334255)),
+                    contentAlignment=Alignment.Center
+                ) {
+                    Text(dow.getDisplayName(TextStyle.SHORT,Locale.US).uppercase(),fontWeight=FontWeight.Bold,fontSize=11.sp)
                 }
             }
         }
-        days.chunked(5).forEach { week ->
+        weekStarts.forEach { monday ->
             Row(Modifier.fillMaxWidth().height(104.dp)) {
-                week.forEach { d ->
-                    val inMonth=d.month==month.month && d.year==month.year
+                (0..4).forEach { offset ->
+                    val d=monday.plusDays(offset.toLong())
+                    val inMonth=d.year==month.year && d.month==month.month
                     val scheduled=state.projects.filter{state.statuses[it.id]?.get(dayKey(d))==STATUS_YES}
                     Column(
                         Modifier.weight(1f).fillMaxHeight()
@@ -345,16 +356,32 @@ private fun CrewScheduleApp(context: Context) {
                             .background(if(inMonth) Color.Transparent else Color(0xFF080D14))
                             .padding(4.dp)
                     ) {
-                        Text(d.dayOfMonth.toString(),Modifier.fillMaxWidth(),fontSize=13.sp,fontWeight=FontWeight.Bold,
+                        Text(
+                            d.dayOfMonth.toString(),
+                            Modifier.fillMaxWidth(),
+                            fontSize=13.sp,
+                            fontWeight=FontWeight.Bold,
                             color=if(inMonth) Color(0xFFE8EEF7) else Color(0xFF566274),
-                            textAlign=androidx.compose.ui.text.style.TextAlign.Center)
+                            textAlign=androidx.compose.ui.text.style.TextAlign.Center
+                        )
                         scheduled.forEach { p ->
-                            Box(Modifier.fillMaxWidth().height(42.dp).padding(top=3.dp)
-                                .border(1.dp,Color(0xFF2B7252),RoundedCornerShape(6.dp))
-                                .background(Color(0xFF173C2E),RoundedCornerShape(6.dp))
-                                .clickable{onProject(p)},contentAlignment=Alignment.Center) {
-                                Text(p.name,Modifier.padding(horizontal=3.dp),fontSize=10.sp,fontWeight=FontWeight.SemiBold,
-                                    maxLines=2,overflow=TextOverflow.Ellipsis,textAlign=androidx.compose.ui.text.style.TextAlign.Center,color=Color(0xFF70E5A8))
+                            Box(
+                                Modifier.fillMaxWidth().height(42.dp).padding(top=3.dp)
+                                    .border(1.dp,Color(0xFF2B7252),RoundedCornerShape(6.dp))
+                                    .background(Color(0xFF173C2E),RoundedCornerShape(6.dp))
+                                    .clickable{onProject(p)},
+                                contentAlignment=Alignment.Center
+                            ) {
+                                Text(
+                                    p.name,
+                                    Modifier.padding(horizontal=3.dp),
+                                    fontSize=10.sp,
+                                    fontWeight=FontWeight.SemiBold,
+                                    maxLines=2,
+                                    overflow=TextOverflow.Ellipsis,
+                                    textAlign=androidx.compose.ui.text.style.TextAlign.Center,
+                                    color=Color(0xFF70E5A8)
+                                )
                             }
                         }
                     }
