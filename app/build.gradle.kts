@@ -5,7 +5,8 @@ plugins {
 
 android {
     namespace = "com.example.crewschedule"
-    compileSdk = 36
+    compileSdk = 37
+    compileSdkMinor = 0
 
     defaultConfig {
         applicationId = "com.example.crewschedule"
