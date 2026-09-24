@@ -252,7 +252,7 @@ private fun CrewScheduleApp(context: Context) {
             state = remote
             syncText = "● Synced · " + java.time.LocalTime.now().format(DateTimeFormatter.ofPattern("h:mm a",Locale.US))
         } else if (error != null) {
-            syncText = if (error == "Sync not configured") "● Local only" else "● Sync error"
+            syncText = if (error == "Sync not configured") "● Local only" else "● Sync error · " + error
         }
         if (fromRefresh) isRefreshing = false
     }
@@ -278,7 +278,7 @@ private fun CrewScheduleApp(context: Context) {
             } else if (error == "Sync not configured") {
                 syncText = "● Local only"
             } else {
-                syncText = "● Sync error"
+                syncText = "● Sync error · " + error
             }
         }
     }
