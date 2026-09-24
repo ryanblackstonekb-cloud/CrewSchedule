@@ -42,6 +42,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.material3.rememberTopAppBarState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -129,48 +130,78 @@ private class SyncClient {
     private val key = BuildConfig.SUPABASE_ANON_KEY
     private val id = BuildConfig.SCHEDULE_ID
     val configured get() = url.isNotBlank() && key.isNotBlank()
+    private val mainHandler = Handler(Looper.getMainLooper())
 
-    fun pull(onResult: (ScheduleState?) -> Unit) = thread {
-        if (!configured) { onResult(null); return@thread }
-        try {
-            val conn = URL("$url/rest/v1/crew_schedule?id=eq.$id&select=payload,updated_at").openConnection() as HttpURLConnection
-            conn.requestMethod = "GET"; conn.setRequestProperty("apikey", key); conn.setRequestProperty("Authorization", "Bearer $key")
-            if (conn.responseCode in 200..299) {
-                val body = conn.inputStream.bufferedReader().use { it.readText() }
-                val rows = JSONArray(body)
-                if (rows.length() > 0) onResult(parsePayload(rows.getJSONObject(0).getJSONObject("payload"))) else onResult(null)
-            } else onResult(null)
-            conn.disconnect()
-        } catch (_: Exception) { onResult(null) }
+    private fun report(onResult: (ScheduleState?, String?) -> Unit, state: ScheduleState?, error: String?) {
+        mainHandler.post { onResult(state, error) }
     }
 
-    fun push(state: ScheduleState) = thread {
-        if (!configured) return@thread
+    fun pull(onResult: (ScheduleState?, String?) -> Unit) = thread {
+        if (!configured) {
+            report(onResult, null, "Sync not configured")
+            return@thread
+        }
+        try {
+            val conn = URL("$url/rest/v1/crew_schedule?id=eq.$id&select=payload,updated_at").openConnection() as HttpURLConnection
+            conn.requestMethod = "GET"
+            conn.connectTimeout = 10000
+            conn.readTimeout = 10000
+            conn.setRequestProperty("apikey", key)
+            conn.setRequestProperty("Authorization", "Bearer $key")
+            val code = conn.responseCode
+            if (code in 200..299) {
+                val body = conn.inputStream.bufferedReader().use { it.readText() }
+                val rows = JSONArray(body)
+                val remote = if (rows.length() > 0) parsePayload(rows.getJSONObject(0).getJSONObject("payload")) else null
+                report(onResult, remote, null)
+            } else {
+                val detail = conn.errorStream?.bufferedReader()?.use { it.readText() }?.take(180).orEmpty()
+                val message = "HTTP " + code + if (detail.isNotBlank()) ": " + detail else ""
+                report(onResult, null, message)
+            }
+            conn.disconnect()
+        } catch (e: Exception) {
+            report(onResult, null, e.message ?: "Connection failed")
+        }
+    }
+
+    fun push(state: ScheduleState, onResult: (Boolean, String?) -> Unit) = thread {
+        if (!configured) {
+            mainHandler.post { onResult(false, "Sync not configured") }
+            return@thread
+        }
         try {
             val payload = state.toJson()
-            val body = JSONObject().put("id", id).put("payload", payload).toString()
+            val body = JSONObject()
+                .put("id", id)
+                .put("payload", payload)
+                .put("updated_at", java.time.Instant.now().toString())
+                .toString()
             val conn = URL("$url/rest/v1/crew_schedule?on_conflict=id").openConnection() as HttpURLConnection
-            conn.requestMethod = "POST"; conn.doOutput = true
-            conn.setRequestProperty("apikey", key); conn.setRequestProperty("Authorization", "Bearer $key")
-            conn.setRequestProperty("Content-Type", "application/json"); conn.setRequestProperty("Prefer", "resolution=merge-duplicates")
+            conn.requestMethod = "POST"
+            conn.doOutput = true
+            conn.connectTimeout = 10000
+            conn.readTimeout = 10000
+            conn.setRequestProperty("apikey", key)
+            conn.setRequestProperty("Authorization", "Bearer $key")
+            conn.setRequestProperty("Content-Type", "application/json")
+            conn.setRequestProperty("Prefer", "resolution=merge-duplicates,return=minimal")
             conn.outputStream.use { it.write(body.toByteArray()) }
-            conn.inputStream.close(); conn.disconnect()
-        } catch (_: Exception) { }
+            val code = conn.responseCode
+            if (code in 200..299) {
+                mainHandler.post { onResult(true, null) }
+            } else {
+                val detail = conn.errorStream?.bufferedReader()?.use { it.readText() }?.take(180).orEmpty()
+                val message = "HTTP " + code + if (detail.isNotBlank()) ": " + detail else ""
+                mainHandler.post { onResult(false, message) }
+            }
+            conn.disconnect()
+        } catch (e: Exception) {
+            mainHandler.post { onResult(false, e.message ?: "Connection failed") }
+        }
     }
 
     private fun parsePayload(o: JSONObject): ScheduleState {
-        val projects = buildList {
-            val a = o.optJSONArray("projects") ?: JSONArray()
-            for (i in 0 until a.length()) { val p=a.getJSONObject(i); add(Project(p.getString("id"),p.getString("name"),p.optString("description"))) }
-        }
-        val statuses = buildMap {
-            val s=o.optJSONObject("statuses") ?: JSONObject()
-            for(pid in s.keys()) { val d=s.getJSONObject(pid); put(pid, buildMap { for(k in d.keys()) put(k,d.getString(k)) }) }
-        }
-        return ScheduleState(projects,statuses)
-    }
-}
-
 private fun ScheduleState.toJson(): JSONObject {
     val p = JSONArray(); projects.forEach { p.put(JSONObject().put("id",it.id).put("name",it.name).put("description",it.description)) }
     val s=JSONObject(); statuses.forEach { (pid,days)-> val d=JSONObject(); days.forEach { (k,v)->d.put(k,v) }; s.put(pid,d) }
@@ -194,14 +225,52 @@ private fun CrewScheduleApp(context: Context) {
     val store=remember { LocalStore(context) }; val sync=remember { SyncClient() }
     var state by remember { mutableStateOf(store.load()) }; var mode by remember { mutableStateOf(Mode.WEEK) }
     var monday by remember { mutableStateOf(currentMonday()) }; var calendarMonth by remember { mutableStateOf(YearMonth.now()) }; var dialog by remember { mutableStateOf<Project?>(null) }; var adding by remember { mutableStateOf(false) }; var delete by remember { mutableStateOf<Project?>(null) }
-    var syncText by remember { mutableStateOf(if(sync.configured) "● Synced" else "● Local only") }
+    var syncText by remember { mutableStateOf(if(sync.configured) "● Syncing…" else "● Local only") }
+    var isRefreshing by remember { mutableStateOf(false) }
 
-    fun save(newState: ScheduleState) { state=newState; store.save(newState); syncText=if(sync.configured) "↻ Syncing…" else "● Local only"; sync.push(newState) }
-    LaunchedEffect(Unit) {
-        fun poll() { sync.pull { remote -> if(remote!=null) { store.save(remote); state=remote; syncText="● Synced · ${java.time.LocalTime.now().format(DateTimeFormatter.ofPattern("h:mm a",Locale.US))}" } } }
-        poll(); val h=Handler(Looper.getMainLooper()); val r=object:Runnable{override fun run(){poll();h.postDelayed(this,15000)}}; h.postDelayed(r,15000)
+    fun finishPull(remote: ScheduleState?, error: String?, fromRefresh: Boolean = false) {
+        if (remote != null) {
+            store.save(remote)
+            state = remote
+            syncText = "● Synced · " + java.time.LocalTime.now().format(DateTimeFormatter.ofPattern("h:mm a",Locale.US))
+        } else if (error != null) {
+            syncText = if (error == "Sync not configured") "● Local only" else "● Sync error"
+        }
+        if (fromRefresh) isRefreshing = false
     }
 
+    fun pullNow(fromRefresh: Boolean = false) {
+        if (fromRefresh) isRefreshing = true
+        if (!sync.configured) {
+            syncText = "● Local only"
+            isRefreshing = false
+            return
+        }
+        syncText = "↻ Syncing…"
+        sync.pull { remote, error -> finishPull(remote, error, fromRefresh) }
+    }
+
+    fun save(newState: ScheduleState) {
+        state = newState
+        store.save(newState)
+        syncText = if (sync.configured) "↻ Syncing…" else "● Local only"
+        sync.push(newState) { ok, error ->
+            if (ok) {
+                syncText = "● Synced · " + java.time.LocalTime.now().format(DateTimeFormatter.ofPattern("h:mm a",Locale.US))
+            } else if (error == "Sync not configured") {
+                syncText = "● Local only"
+            } else {
+                syncText = "● Sync error"
+            }
+        }
+    }
+
+    LaunchedEffect(Unit) {
+        pullNow()
+        val h=Handler(Looper.getMainLooper())
+        val r=object:Runnable{override fun run(){pullNow();h.postDelayed(this,15000)}}
+        h.postDelayed(r,15000)
+    }
     MaterialTheme(colorScheme=darkScheme) {
         Surface(Modifier.fillMaxSize(), color=Color(0xFF0B1018)) {
             Column(Modifier.fillMaxSize().statusBarsPadding().navigationBarsPadding()) {
@@ -211,15 +280,21 @@ private fun CrewScheduleApp(context: Context) {
                 } else {
                     CalendarNavigator(calendarMonth, { calendarMonth=calendarMonth.minusMonths(1) }, { calendarMonth=YearMonth.now() }, { calendarMonth=calendarMonth.plusMonths(1) })
                 }
-                when(mode) {
-                    Mode.WEEK -> WeekMode(state,monday,{id,date,status ->
-                        val statuses=state.statuses.toMutableMap()
-                        val days=(statuses[id]?.toMutableMap()?:mutableMapOf())
-                        days[dayKey(date)]=status
-                        statuses[id]=days
-                        save(state.copy(statuses=statuses))
-                    },{dialog=it}) { adding=true }
-                    Mode.CALENDAR -> CalendarMode(state,calendarMonth,{dialog=it})
+                PullToRefreshBox(
+                    isRefreshing = isRefreshing,
+                    onRefresh = { pullNow(true) },
+                    modifier = Modifier.fillMaxSize()
+                ) {
+                    when(mode) {
+                        Mode.WEEK -> WeekMode(state,monday,{id,date,status ->
+                            val statuses=state.statuses.toMutableMap()
+                            val days=(statuses[id]?.toMutableMap()?:mutableMapOf())
+                            days[dayKey(date)]=status
+                            statuses[id]=days
+                            save(state.copy(statuses=statuses))
+                        },{dialog=it}) { adding=true }
+                        Mode.CALENDAR -> CalendarMode(state,calendarMonth,{dialog=it})
+                    }
                 }
             }
         }
