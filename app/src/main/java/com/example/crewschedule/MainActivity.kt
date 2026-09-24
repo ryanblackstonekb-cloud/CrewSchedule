@@ -283,7 +283,7 @@ private fun CrewScheduleApp(context: Context) {
                 PullToRefreshBox(
                     isRefreshing = isRefreshing,
                     onRefresh = { pullNow(true) },
-                    modifier = Modifier.fillMaxSize()
+                    modifier = Modifier.fillMaxWidth().weight(1f)
                 ) {
                     when(mode) {
                         Mode.WEEK -> WeekMode(state,monday,{id,date,status ->
