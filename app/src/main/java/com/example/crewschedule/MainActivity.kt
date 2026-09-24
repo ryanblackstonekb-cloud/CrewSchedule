@@ -202,6 +202,24 @@ private class SyncClient {
     }
 
     private fun parsePayload(o: JSONObject): ScheduleState {
+        val projects = buildList {
+            val a = o.optJSONArray("projects") ?: JSONArray()
+            for (i in 0 until a.length()) {
+                val p = a.getJSONObject(i)
+                add(Project(p.getString("id"), p.getString("name"), p.optString("description")))
+            }
+        }
+        val statuses = buildMap {
+            val s = o.optJSONObject("statuses") ?: JSONObject()
+            for (pid in s.keys()) {
+                val d = s.getJSONObject(pid)
+                put(pid, buildMap { for (k in d.keys()) put(k, d.getString(k)) })
+            }
+        }
+        return ScheduleState(projects, statuses)
+    }
+}
+
 private fun ScheduleState.toJson(): JSONObject {
     val p = JSONArray(); projects.forEach { p.put(JSONObject().put("id",it.id).put("name",it.name).put("description",it.description)) }
     val s=JSONObject(); statuses.forEach { (pid,days)-> val d=JSONObject(); days.forEach { (k,v)->d.put(k,v) }; s.put(pid,d) }
