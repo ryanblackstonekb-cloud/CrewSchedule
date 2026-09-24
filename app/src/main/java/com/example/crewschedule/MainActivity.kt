@@ -251,7 +251,7 @@ private fun CrewScheduleApp(context: Context) {
     val days=(0..4).map{monday.plusDays(it.toLong())}
     Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(horizontal=8.dp)) {
         Row(Modifier.fillMaxWidth().height(52.dp),verticalAlignment=Alignment.CenterVertically) {
-            Box(Modifier.width(104.dp).fillMaxHeight().drawBehind { drawLine(Color(0xFF334255), Offset(0f, 0f), Offset(0f, size.height), strokeWidth = 1f) },contentAlignment=Alignment.CenterStart){
+            Box(Modifier.width(104.dp).fillMaxHeight().border(0.5.dp,Color(0xFF334255)).drawBehind { drawLine(Color(0xFF334255), Offset(0f, 0f), Offset(0f, size.height), strokeWidth = 1f) },contentAlignment=Alignment.CenterStart){
                 IconButton(onClick=onAdd){Icon(Icons.Default.Add,"Add project")}
             }
             days.forEach { d ->
@@ -287,24 +287,21 @@ private fun CrewScheduleApp(context: Context) {
 }
 
 @Composable private fun StatusCell(status:String,modifier:Modifier,onStatusChange:(String)->Unit) {
-    val color=when(status){STATUS_YES->Color(0xFF36D18A);STATUS_NO->Color(0xFFE85D7A);else->Color(0xFFF2C94C)}
+    val color=when(status){STATUS_YES->Color(0xFF36D18A);STATUS_NO->Color(0xFFE56B6F);else->Color(0xFFE4B55A)}
     var expanded by remember { mutableStateOf(false) }
     val symbol=when(status){STATUS_YES->"✓";STATUS_NO->"X";else->"?"}
-    val tileShape=RoundedCornerShape(13.dp)
     Box(
-        modifier.fillMaxHeight()
-            .border(0.5.dp,Color(0xFF334255))
-            .clickable{expanded=true},
+        modifier.height(56.dp).padding(4.dp),
         contentAlignment=Alignment.Center
     ) {
         Box(
-            Modifier
-                .size(48.dp)
-                .background(color.copy(alpha=0.24f), tileShape)
-                .border(1.5.dp, color.copy(alpha=0.85f), tileShape),
+            Modifier.fillMaxSize()
+                .border(1.dp,Color(0xFF2A3545),RoundedCornerShape(10.dp))
+                .background(color.copy(alpha=.12f),RoundedCornerShape(10.dp))
+                .clickable{expanded=true},
             contentAlignment=Alignment.Center
         ) {
-            Text(symbol,fontSize=28.sp,fontWeight=FontWeight.Bold,color=color)
+            Text(symbol,fontSize=21.sp,fontWeight=FontWeight.Bold,color=color)
         }
         DropdownMenu(expanded=expanded,onDismissRequest={expanded=false}) {
             DropdownMenuItem(
@@ -312,11 +309,11 @@ private fun CrewScheduleApp(context: Context) {
                 onClick={onStatusChange(STATUS_YES);expanded=false}
             )
             DropdownMenuItem(
-                text={Row(verticalAlignment=Alignment.CenterVertically){Text("X",color=Color(0xFFE85D5D),fontSize=21.sp,fontWeight=FontWeight.Bold); Spacer(Modifier.width(10.dp)); Text("Not scheduled",color=Color(0xFFE85D5D),fontWeight=FontWeight.SemiBold)}},
+                text={Row(verticalAlignment=Alignment.CenterVertically){Text("X",color=Color(0xFFE56B6F),fontSize=21.sp,fontWeight=FontWeight.Bold); Spacer(Modifier.width(10.dp)); Text("Not scheduled",color=Color(0xFFE56B6F),fontWeight=FontWeight.SemiBold)}},
                 onClick={onStatusChange(STATUS_NO);expanded=false}
             )
             DropdownMenuItem(
-                text={Row(verticalAlignment=Alignment.CenterVertically){Text("?",color=Color(0xFFF2C94C),fontSize=22.sp,fontWeight=FontWeight.Bold); Spacer(Modifier.width(10.dp)); Text("Unknown",color=Color(0xFFF2C94C),fontWeight=FontWeight.SemiBold)}},
+                text={Row(verticalAlignment=Alignment.CenterVertically){Text("?",color=Color(0xFFE4B55A),fontSize=22.sp,fontWeight=FontWeight.Bold); Spacer(Modifier.width(10.dp)); Text("Unknown",color=Color(0xFFE4B55A),fontWeight=FontWeight.SemiBold)}},
                 onClick={onStatusChange(STATUS_UNKNOWN);expanded=false}
             )
         }
@@ -361,7 +358,7 @@ private fun CrewScheduleApp(context: Context) {
             val maxProjects=daySchedules.maxOfOrNull{it.size} ?: 0
             // Each Monday-Friday week row gets only as tall as its busiest day.
             // Other weeks remain compact instead of expanding to match it.
-            val rowHeight=(104 + ((maxProjects-1).coerceAtLeast(0) * 45)).dp
+            val rowHeight=(if (maxProjects == 0) 104 else 74 + ((maxProjects-1) * 45)).dp
 
             Row(Modifier.fillMaxWidth().height(rowHeight)) {
                 (0..4).forEach { offset ->
