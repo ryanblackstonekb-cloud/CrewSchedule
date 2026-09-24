@@ -19,3 +19,5 @@ For GitHub Actions, add repository secrets named `SUPABASE_URL`, `SUPABASE_ANON_
 ## Build
 
 The project uses Android Gradle Plugin 9.4, Gradle 9.6, Kotlin 2.4.10, and the September 2026 Compose BOM. GitHub Actions builds a debug APK and uploads it as `crew-schedule-debug-apk`.
+
+<!-- Sync configuration updated; rebuild triggered. -->
