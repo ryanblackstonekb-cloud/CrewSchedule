@@ -53,6 +53,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.material.icons.Icons
@@ -201,7 +203,7 @@ private fun CrewScheduleApp(context: Context) {
 
     MaterialTheme(colorScheme=darkScheme) {
         Surface(Modifier.fillMaxSize(), color=Color(0xFF0B1018)) {
-            Column(Modifier.fillMaxSize().statusBarsPadding()) {
+            Column(Modifier.fillMaxSize().statusBarsPadding().navigationBarsPadding()) {
                 TopBar(mode, {mode=it}, syncText)
                 if (mode == Mode.WEEK) {
                     WeekNavigator(monday, { monday=monday.minusWeeks(1) }, { monday=currentMonday() }, { monday=monday.plusWeeks(1) })
@@ -240,7 +242,7 @@ private fun CrewScheduleApp(context: Context) {
     Row(Modifier.fillMaxWidth().padding(horizontal=12.dp,vertical=4.dp),verticalAlignment=Alignment.CenterVertically) {
         IconButton(onClick=prev){Icon(Icons.Default.ChevronLeft,"Previous week")}
         Text(weekLabel(monday),Modifier.weight(1f),fontWeight=FontWeight.SemiBold,fontSize=17.sp)
-        TextButton(onClick=today){Text("Today")}; IconButton(onClick=next){Icon(Icons.Default.ChevronRight,"Next week")}
+        IconButton(onClick=next){Icon(Icons.Default.ChevronRight,"Next week")}; TextButton(onClick=today){Text("Today")}
     }
 }
 
@@ -248,7 +250,7 @@ private fun CrewScheduleApp(context: Context) {
     val days=(0..4).map{monday.plusDays(it.toLong())}
     Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(horizontal=8.dp)) {
         Row(Modifier.fillMaxWidth().height(52.dp),verticalAlignment=Alignment.CenterVertically) {
-            Box(Modifier.width(104.dp).fillMaxHeight(),contentAlignment=Alignment.CenterStart){
+            Box(Modifier.width(104.dp).fillMaxHeight().drawBehind { drawLine(Color(0xFF334255), Offset(0f, 0f), Offset(0f, size.height), strokeWidth = 1f) },contentAlignment=Alignment.CenterStart){
                 IconButton(onClick=onAdd){Icon(Icons.Default.Add,"Add project")}
             }
             days.forEach { d ->
@@ -265,7 +267,7 @@ private fun CrewScheduleApp(context: Context) {
         Divider(color=Color(0xFF263244))
         state.projects.forEach { p ->
             Row(Modifier.fillMaxWidth().height(68.dp),verticalAlignment=Alignment.CenterVertically) {
-                Column(Modifier.width(104.dp).clickable{onProject(p)}.padding(end=6.dp)){
+                Column(Modifier.width(104.dp).fillMaxHeight().drawBehind { drawLine(Color(0xFF334255), Offset(0f, 0f), Offset(0f, size.height), strokeWidth = 1f) }.clickable{onProject(p)}.padding(end=6.dp), verticalArrangement=Arrangement.Center){
                     Text(p.name,maxLines=1,overflow=TextOverflow.Ellipsis,fontWeight=FontWeight.SemiBold,fontSize=14.sp)
                     if(p.description.isNotBlank()) Text(p.description,maxLines=1,overflow=TextOverflow.Ellipsis,fontSize=10.sp,color=Color(0xFF8794A8))
                 }
@@ -284,16 +286,25 @@ private fun CrewScheduleApp(context: Context) {
 }
 
 @Composable private fun StatusCell(status:String,modifier:Modifier,onStatusChange:(String)->Unit) {
-    val color=when(status){STATUS_YES->Color(0xFF36D18A);STATUS_NO->Color(0xFFE56B6F);else->Color(0xFFE4B55A)}
+    val color=when(status){STATUS_YES->Color(0xFF36D18A);STATUS_NO->Color(0xFFE85D7A);else->Color(0xFFF2C94C)}
     var expanded by remember { mutableStateOf(false) }
     val symbol=when(status){STATUS_YES->"✓";STATUS_NO->"X";else->"?"}
+    val tileShape=RoundedCornerShape(13.dp)
     Box(
         modifier.fillMaxHeight()
             .border(0.5.dp,Color(0xFF334255))
             .clickable{expanded=true},
         contentAlignment=Alignment.Center
     ) {
-        Text(symbol,fontSize=21.sp,fontWeight=FontWeight.Bold,color=color)
+        Box(
+            Modifier
+                .size(48.dp)
+                .background(color.copy(alpha=0.24f), tileShape)
+                .border(1.5.dp, color.copy(alpha=0.85f), tileShape),
+            contentAlignment=Alignment.Center
+        ) {
+            Text(symbol,fontSize=28.sp,fontWeight=FontWeight.Bold,color=color)
+        }
         DropdownMenu(expanded=expanded,onDismissRequest={expanded=false}) {
             DropdownMenuItem(
                 text={Row(verticalAlignment=Alignment.CenterVertically){Text("✓",color=Color(0xFF36D18A),fontSize=22.sp,fontWeight=FontWeight.Bold); Spacer(Modifier.width(10.dp)); Text("Scheduled",color=Color(0xFF36D18A),fontWeight=FontWeight.SemiBold)}},
@@ -315,7 +326,7 @@ private fun CrewScheduleApp(context: Context) {
     Row(Modifier.fillMaxWidth().padding(horizontal=12.dp,vertical=4.dp),verticalAlignment=Alignment.CenterVertically) {
         IconButton(onClick=prev){Icon(Icons.Default.ChevronLeft,"Previous month")}
         Text(month.format(DateTimeFormatter.ofPattern("MMMM yyyy",Locale.US)),Modifier.weight(1f),fontWeight=FontWeight.SemiBold,fontSize=17.sp)
-        TextButton(onClick=today){Text("Today")}; IconButton(onClick=next){Icon(Icons.Default.ChevronRight,"Next month")}
+        IconButton(onClick=next){Icon(Icons.Default.ChevronRight,"Next month")}; TextButton(onClick=today){Text("Today")}
     }
 }
 
